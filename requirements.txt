@@ -1,1 +1,11 @@
+certifi==2020.4.5.1
+chardet==3.0.4
+idna==2.9
+importlib-metadata==1.6.1
+keyring==21.2.1
 phue==1.1
+pycrypto==2.6.1
+requests==2.23.0
+simple-crypt==4.1.7
+urllib3==1.25.9
+zipp==3.1.0
