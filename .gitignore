@@ -1,5 +1,6 @@
 Pipfile
 Pipfile.lock
+secrets.json.aes
 
 
 ############################################

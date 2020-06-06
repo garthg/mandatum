@@ -48,7 +48,7 @@ class CachedSecrets(object):
     def get_password(self, username):
         data = self.read_cache()
         if not username in data:
-            raise ValueError('No entry for {} in encrypted file: {}'.format(username, self.filepath))
+            raise ValueError(self.get_interactive_instructions(username))
         return data[username]
     
     def set_password(self, username, password):
@@ -56,20 +56,24 @@ class CachedSecrets(object):
         self.data[username] = password
         self.write_cache()
 
+    def get_system_username(self):
+        return os.path.abspath(self.filepath)
+
     def get_system_password(self):
-        result = keyring.get_password(self.APPLICATION_ID, str(self.__class__))
+        result = keyring.get_password(self.APPLICATION_ID, self.get_system_username())
         return result
 
     def set_system_password(self, password):
-        keyring.set_password(self.APPLICATION_ID, str(self.__class__), password)
+        keyring.set_password(self.APPLICATION_ID, self.get_system_username(), password)
+
+    def get_interactive_instructions(self, username):
+        return 'No entry for "{username}" in cache, to set interactively run `python {filename} set {username}` and follow prompts.'.format(
+                username=username, filename=__file__)
 
 
 def get_password(username):
     secrets = CachedSecrets()
-    try:
-        password = secrets.get_password(username)
-    except ValueError:
-        raise ValueError('No password for "{}": run `python {} set {}` and follow prompts.'.format(username, sys.argv[0], username))
+    password = secrets.get_password(username)
     return password
 
 
@@ -80,7 +84,7 @@ def set_password(username, password):
 
 if __name__ == '__main__':
     args = sys.argv
-    usage = 'Usage: {} get|set <username>'.format(args[0])
+    usage = 'Usage: {} get|set <key>'.format(args[0])
     if args:
         if not len(args) == 3:
             print(usage)
@@ -90,9 +94,10 @@ if __name__ == '__main__':
         if command == 'get':
             print(get_password(username))
         elif command == 'set':
-            print('Enter password for {}'.format(username))
+            print('At password prompt, enter value for key: {}'.format(username))
             password = getpass()
             set_password(username, password)
+            print('Value stored in encrypted file: {}'.format(os.path.abspath(CachedSecrets().filepath)))
         else:
             print(usage)
             sys.exit(11)
