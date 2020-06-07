@@ -3,7 +3,7 @@ import os
 import json
 from getpass import getpass
 import keyring
-import simplecrypt
+from cryptography.fernet import Fernet
 import string
 import secrets
 
@@ -15,16 +15,16 @@ class CachedSecrets(object):
         self.filepath = filepath
         self.data = None
 
-    def generate_random_password(self, length=32):
-        alphabet = string.ascii_letters + string.digits
-        return ''.join(secrets.choice(alphabet) for i in range(length))
-
-    def get_or_create_system_password(self):
+    def get_or_create_system_crypto_suite(self):
+        password_bytes = None
         password = self.get_system_password()
         if not password:
-            password = self.generate_random_password()
+            password_bytes = Fernet.generate_key()
+            password = password_bytes.decode('utf8')
             self.set_system_password(password)
-        return password
+        else:
+            password_bytes = password.encode('utf8')
+        return Fernet(password_bytes)
 
     def read_cache(self):
         if self.data is None:
@@ -33,7 +33,7 @@ class CachedSecrets(object):
                 with open(self.filepath, 'rb') as fid:
                     data_cipher = fid.read()
                     if data_cipher:
-                        data_string = simplecrypt.decrypt(self.get_or_create_system_password(), data_cipher)
+                        data_string = self.get_or_create_system_crypto_suite().decrypt(data_cipher)
                         data = json.loads(data_string)
                         self.data = data
         return self.data
@@ -42,7 +42,7 @@ class CachedSecrets(object):
         if self.data is not None:
             with open(self.filepath, 'wb') as fid:
                 data_string = json.dumps(self.data)
-                data_cipher = simplecrypt.encrypt(self.get_or_create_system_password(), data_string)
+                data_cipher = self.get_or_create_system_crypto_suite().encrypt(data_string.encode('utf8'))
                 fid.write(data_cipher)
 
     def get_password(self, username):
@@ -51,9 +51,9 @@ class CachedSecrets(object):
             raise ValueError(self.get_interactive_instructions(username))
         return data[username]
     
-    def set_password(self, username, password):
+    def set_password(self, name, password):
         self.read_cache()  # Do this to make sure self.data is fresh (not thread safe...)
-        self.data[username] = password
+        self.data[name] = password
         self.write_cache()
 
     def get_system_username(self):
@@ -71,33 +71,42 @@ class CachedSecrets(object):
                 username=username, filename=__file__)
 
 
-def get_password(username):
+def get_password(name):
     secrets = CachedSecrets()
-    password = secrets.get_password(username)
+    password = secrets.get_password(name)
     return password
 
 
-def set_password(username, password):
+def set_password(name, password):
     secrets = CachedSecrets()
-    secrets.set_password(username, password)
+    secrets.set_password(name, password)
+
+
+def get_password_keys():
+    secrets = CachedSecrets()
+    keys = secrets.read_cache().keys()
+    return keys
 
 
 if __name__ == '__main__':
     args = sys.argv
-    usage = 'Usage: {} get|set <key>'.format(args[0])
+    usage = 'Usage: {} get|set|list [<key>]'.format(args[0])
     if args:
-        if not len(args) == 3:
+        if not len(args) >= 2:
             print(usage)
             sys.exit(11)
         command = args[1]
-        username = args[2]
         if command == 'get':
-            print(get_password(username))
+            name = args[2]
+            print(get_password(name))
         elif command == 'set':
-            print('At password prompt, enter value for key: {}'.format(username))
+            name = args[2]
+            print('At password prompt, enter value for: {}'.format(name))
             password = getpass()
-            set_password(username, password)
+            set_password(name, password)
             print('Value stored in encrypted file: {}'.format(os.path.abspath(CachedSecrets().filepath)))
+        elif command == 'list':
+            print('\n'.join(sorted(get_password_keys())))
         else:
             print(usage)
             sys.exit(11)
